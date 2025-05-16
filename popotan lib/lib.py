@@ -1,42 +1,37 @@
-from ctypes import pointer
-from fileinput import filename
 from binary_reader import BinaryReader
 import sys
 from pathlib import Path
-import os
-def extract(reader,directory,Myfilename):
+def extract(reader, directory, Myfilename):
+    if reader.read_str(3).lower() != "lib":
+        return
     reader.seek(8)
     count = reader.read_uint32()
     reader.seek(0x10)
-    for i in range(count):
-        filename = reader.read_str(36)
+    for _ in range(count):
+        filename = reader.read_str(36).strip('\x00')
         size = reader.read_uint32()
         origpointer = reader.read_uint32()
-        pointer = (origpointer)
+        pointer = origpointer
         stay = reader.pos()
         reader.seek(pointer)
         print(filename)
         output_path = directory / Path(Myfilename + ".unpack")
         output_path.mkdir(parents=True, exist_ok=True)
-        output_file = output_path / (filename)
-        fe = open(output_file, "wb")
-        fe.write(reader.read_bytes(size))
-        fe.close()
-        reader.seek(stay+4)
-Mypath = Path(sys.argv[1])
-directory = str(Mypath.resolve().parent)
-Myfilename = Mypath.name
-path = Mypath.open("rb")
-reader = BinaryReader(path.read())
-w = BinaryReader()
-w.set_endian(False)
-reader.set_endian(False) # little endian
-isFile = os.path.isfile(sys.argv[1])
-unique_id = 0
-if(Mypath.is_file()):
-    extract(reader,directory,Myfilename)
-#        j = str(i)
-#        fe = open(directory + "\\" + "TLFD" + "\\" + j + ".dat","wb")S
-#        fe.write(reader.read_bytes(size1))
-#        fe.close
-    
+        output_file = output_path / filename
+        file_bytes = reader.read_bytes(size)
+        with open(output_file, "wb") as fe:
+            fe.write(file_bytes)
+        sub_reader = BinaryReader(file_bytes)
+        sub_reader.set_endian(False)
+        extract(sub_reader, output_path, Path(filename).stem)
+        reader.seek(stay + 4)
+
+if __name__ == "__main__":
+    Mypath = Path(sys.argv[1])
+    directory = Mypath.resolve().parent
+    Myfilename = Mypath.name
+    with Mypath.open("rb") as path:
+        reader = BinaryReader(path.read())
+    reader.set_endian(False) # little endian
+    if Mypath.is_file():
+        extract(reader, directory, Myfilename)
